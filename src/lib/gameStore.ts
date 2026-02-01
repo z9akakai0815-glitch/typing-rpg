@@ -1,33 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import { enemies, getRandomWord, difficultySettings, type Difficulty, type Word, type Enemy } from './words';
-import { canTypeNextChar } from './romajiMap';
-
-// 単語完成チェック（柔軟な入力対応）
-function isWordComplete(romaji: string, input: string): boolean {
-  // 代替入力のマッピング
-  const alternatives: [string, string][] = [
-    ['shi', 'si'], ['sha', 'sya'], ['shu', 'syu'], ['sho', 'syo'],
-    ['chi', 'ti'], ['cha', 'tya'], ['chu', 'tyu'], ['cho', 'tyo'],
-    ['tsu', 'tu'], ['fu', 'hu'],
-    ['ji', 'zi'], ['ja', 'zya'], ['ju', 'zyu'], ['jo', 'zyo'],
-    ['zu', 'du'],
-  ];
-  
-  // 正規化: 入力を標準形式に変換
-  let normalized = input.toLowerCase();
-  for (const [standard, alt] of alternatives) {
-    // 代替入力を標準形式に置換
-    normalized = normalized.split(alt).join(standard);
-  }
-  
-  // 標準形式と比較
-  if (normalized === romaji.toLowerCase()) {
-    return true;
-  }
-  
-  // 入力長で簡易チェック
-  return input.length >= romaji.length;
-}
+import { canTypeNextChar, isWordComplete } from './romajiMap';
 
 // ゲーム状態
 export type GameState = 'title' | 'difficulty' | 'playing' | 'gameover' | 'clear' | 'ranking';

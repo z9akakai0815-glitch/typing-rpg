@@ -1,201 +1,84 @@
 // ローマ字の複数入力対応マップ
 // 同じ日本語に対して複数の入力方法を許容する
 
-// 基本的なローマ字変換の代替パターン
-export const romajiVariants: Record<string, string[]> = {
-  // し行
+// 文字ごとの代替入力パターン
+export const charAlternatives: Record<string, string[]> = {
+  // 基本の代替
+  'si': ['si', 'shi'],
   'shi': ['shi', 'si'],
+  'ti': ['ti', 'chi'],
+  'chi': ['chi', 'ti'],
+  'tu': ['tu', 'tsu'],
+  'tsu': ['tsu', 'tu'],
+  'hu': ['hu', 'fu'],
+  'fu': ['fu', 'hu'],
+  'zi': ['zi', 'ji'],
+  'ji': ['ji', 'zi'],
+  
+  // 拗音
+  'sya': ['sya', 'sha'],
   'sha': ['sha', 'sya'],
+  'syu': ['syu', 'shu'],
   'shu': ['shu', 'syu'],
+  'syo': ['syo', 'sho'],
   'sho': ['sho', 'syo'],
   
-  // ち行
-  'chi': ['chi', 'ti'],
-  'cha': ['cha', 'tya', 'cya'],
-  'chu': ['chu', 'tyu', 'cyu'],
-  'cho': ['cho', 'tyo', 'cyo'],
+  'tya': ['tya', 'cha'],
+  'cha': ['cha', 'tya'],
+  'tyu': ['tyu', 'chu'],
+  'chu': ['chu', 'tyu'],
+  'tyo': ['tyo', 'cho'],
+  'cho': ['cho', 'tyo'],
   
-  // つ
-  'tsu': ['tsu', 'tu'],
-  
-  // ふ
-  'fu': ['fu', 'hu'],
-  
-  // じ行
-  'ji': ['ji', 'zi'],
+  'zya': ['zya', 'ja', 'jya'],
   'ja': ['ja', 'zya', 'jya'],
+  'jya': ['jya', 'ja', 'zya'],
+  'zyu': ['zyu', 'ju', 'jyu'],
   'ju': ['ju', 'zyu', 'jyu'],
+  'jyu': ['jyu', 'ju', 'zyu'],
+  'zyo': ['zyo', 'jo', 'jyo'],
   'jo': ['jo', 'zyo', 'jyo'],
+  'jyo': ['jyo', 'jo', 'zyo'],
   
-  // ず/づ
+  // づ/ず
+  'du': ['du', 'zu'],
   'zu': ['zu', 'du'],
   
-  // ん (次の文字によって n, nn が必要)
-  'n': ['n', 'nn'],
-  
-  // 小さい文字
-  'xtu': ['xtu', 'ltu', 'xtsu', 'ltsu'],
-  
-  // その他
-  'wo': ['wo', 'o'],
+  // 長音（ハイフン対応）
+  '-': ['-', 'ー'],
+  'ー': ['ー', '-'],
 };
 
-// 入力文字列が期待するローマ字にマッチするかチェック
-// 複数の入力方法を許容する
-export function matchesRomaji(expected: string, input: string): { matches: boolean; consumed: number } {
-  const lowerExpected = expected.toLowerCase();
-  const lowerInput = input.toLowerCase();
-  
-  // 完全一致チェック
-  if (lowerExpected.startsWith(lowerInput)) {
-    return { matches: true, consumed: lowerInput.length };
-  }
-  
-  // 代替パターンをチェック
-  for (const [standard, variants] of Object.entries(romajiVariants)) {
-    if (lowerExpected.startsWith(standard)) {
-      for (const variant of variants) {
-        if (variant.startsWith(lowerInput) || lowerInput.startsWith(variant)) {
-          // 入力が代替パターンの一部または完全一致
-          if (lowerInput.length <= variant.length) {
-            return { matches: true, consumed: lowerInput.length };
-          }
-        }
-      }
-    }
-  }
-  
-  return { matches: false, consumed: 0 };
-}
-
-// 次に期待される文字をチェック（複数の入力方法を考慮）
-export function isValidNextChar(romaji: string, currentInput: string, nextChar: string): boolean {
-  const remaining = romaji.slice(currentInput.length).toLowerCase();
-  const char = nextChar.toLowerCase();
-  
-  // 直接マッチ
-  if (remaining.startsWith(char)) {
-    return true;
-  }
-  
-  // 代替パターンをチェック
-  const fullInput = currentInput.toLowerCase() + char;
-  
-  // 各代替パターンをチェック
-  for (const [standard, variants] of Object.entries(romajiVariants)) {
-    // 期待するローマ字の中にこのパターンがあるか
-    const standardPos = romaji.toLowerCase().indexOf(standard);
-    if (standardPos !== -1) {
-      for (const variant of variants) {
-        // 現在の入力位置がこのパターンの範囲内か
-        const variantStart = standardPos;
-        const inputPos = currentInput.length;
-        
-        if (inputPos >= variantStart && inputPos < variantStart + variant.length) {
-          // この位置で代替パターンが使えるか
-          const expectedInVariant = variant[inputPos - variantStart];
-          if (expectedInVariant === char) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-  
-  return false;
-}
-
-// 単語全体の入力を検証し、正規化された入力を返す
-export function validateAndNormalizeInput(
-  romaji: string,
-  input: string
-): { valid: boolean; normalizedLength: number } {
-  let romajiPos = 0;
-  let inputPos = 0;
-  
-  while (inputPos < input.length && romajiPos < romaji.length) {
-    const remainingRomaji = romaji.slice(romajiPos).toLowerCase();
-    const inputChar = input[inputPos].toLowerCase();
-    
-    // 直接マッチ
-    if (remainingRomaji[0] === inputChar) {
-      romajiPos++;
-      inputPos++;
-      continue;
-    }
-    
-    // 代替パターンをチェック
-    let found = false;
-    for (const [standard, variants] of Object.entries(romajiVariants)) {
-      if (remainingRomaji.startsWith(standard)) {
-        for (const variant of variants) {
-          if (variant[0] === inputChar) {
-            // この代替パターンを使用
-            const variantRemaining = input.slice(inputPos).toLowerCase();
-            if (variantRemaining.startsWith(variant) || variant.startsWith(variantRemaining)) {
-              // 代替パターンの長さだけ進む
-              const matchLen = Math.min(variant.length, input.length - inputPos);
-              const inputPart = input.slice(inputPos, inputPos + matchLen).toLowerCase();
-              if (variant.startsWith(inputPart)) {
-                if (inputPart.length === variant.length) {
-                  romajiPos += standard.length;
-                }
-                inputPos += matchLen;
-                found = true;
-                break;
-              }
-            }
-          }
-        }
-        if (found) break;
-      }
-    }
-    
-    if (!found) {
-      return { valid: false, normalizedLength: romajiPos };
-    }
-  }
-  
-  return { valid: true, normalizedLength: romajiPos };
-}
-
-// シンプルな文字チェック: 現在の入力に対して次の文字が有効か
+// 次の入力文字が有効かチェック
 export function canTypeNextChar(romaji: string, typed: string, char: string): boolean {
   const lower = char.toLowerCase();
   const remaining = romaji.toLowerCase().substring(typed.length);
   
+  if (remaining.length === 0) return false;
+  
   // 直接一致
-  if (remaining.startsWith(lower)) {
+  if (remaining[0] === lower) {
     return true;
   }
   
-  // 代替入力チェック
-  // shi -> si, chi -> ti, tsu -> tu, fu -> hu, ji -> zi
-  const alternatives: [string, string][] = [
-    ['shi', 'si'], ['si', 'shi'],
-    ['sha', 'sya'], ['sya', 'sha'],
-    ['shu', 'syu'], ['syu', 'shu'],
-    ['sho', 'syo'], ['syo', 'sho'],
-    ['chi', 'ti'], ['ti', 'chi'],
-    ['cha', 'tya'], ['tya', 'cha'],
-    ['chu', 'tyu'], ['tyu', 'chu'],
-    ['cho', 'tyo'], ['tyo', 'cho'],
-    ['tsu', 'tu'], ['tu', 'tsu'],
-    ['fu', 'hu'], ['hu', 'fu'],
-    ['ji', 'zi'], ['zi', 'ji'],
-    ['ja', 'zya'], ['zya', 'ja'],
-    ['ju', 'zyu'], ['zyu', 'ju'],
-    ['jo', 'zyo'], ['zyo', 'jo'],
-    ['zu', 'du'], ['du', 'zu'],
-  ];
+  // ハイフンで長音を入力
+  if (lower === '-' && remaining[0] === 'a' && typed.length > 0) {
+    // 長音として許可（例: ra-men → raamen）
+    const lastChar = typed[typed.length - 1]?.toLowerCase();
+    if (lastChar === remaining[0]) {
+      return true;
+    }
+  }
   
-  // 現在位置から代替パターンを探す
-  for (const [from, to] of alternatives) {
-    if (remaining.startsWith(from)) {
-      // fromの位置にいる場合、toの対応する文字も許可
-      const posInFrom = 0; // 常に先頭から
-      if (posInFrom < to.length && to[posInFrom] === lower) {
-        return true;
+  // 代替入力パターンをチェック
+  // 現在の入力位置から始まる代替パターンを探す
+  for (let len = 3; len >= 2; len--) {
+    const chunk = remaining.substring(0, len);
+    if (charAlternatives[chunk]) {
+      for (const alt of charAlternatives[chunk]) {
+        if (alt[0] === lower) {
+          return true;
+        }
       }
     }
   }
@@ -203,42 +86,104 @@ export function canTypeNextChar(romaji: string, typed: string, char: string): bo
   return false;
 }
 
-// 入力を受け入れて、対応するローマ字の進行位置を返す
-export function acceptInput(romaji: string, typed: string, char: string): { accepted: boolean; newTyped: string; romajiProgress: number } {
+// 入力を受け入れて次の状態を返す
+export function processInput(
+  romaji: string, 
+  currentInput: string, 
+  char: string
+): { accepted: boolean; newInput: string; completed: boolean } {
   const lower = char.toLowerCase();
-  const currentPos = typed.length;
-  const remaining = romaji.toLowerCase().substring(currentPos);
+  const inputPos = currentInput.length;
+  const remaining = romaji.toLowerCase().substring(inputPos);
+  
+  if (remaining.length === 0) {
+    return { accepted: false, newInput: currentInput, completed: true };
+  }
   
   // 直接一致
-  if (remaining.startsWith(lower)) {
+  if (remaining[0] === lower) {
+    const newInput = currentInput + lower;
     return { 
       accepted: true, 
-      newTyped: typed + lower,
-      romajiProgress: currentPos + 1
+      newInput, 
+      completed: newInput.length >= romaji.length 
     };
   }
   
-  // 代替入力チェック
-  const alternatives: [string, string][] = [
-    ['shi', 'si'], ['sha', 'sya'], ['shu', 'syu'], ['sho', 'syo'],
-    ['chi', 'ti'], ['cha', 'tya'], ['chu', 'tyu'], ['cho', 'tyo'],
-    ['tsu', 'tu'], ['fu', 'hu'],
-    ['ji', 'zi'], ['ja', 'zya'], ['ju', 'zyu'], ['jo', 'zyo'],
-    ['zu', 'du'],
-  ];
-  
-  for (const [standard, alt] of alternatives) {
-    if (remaining.startsWith(standard)) {
-      // 代替入力の先頭文字と一致するかチェック
-      if (alt.startsWith(lower)) {
+  // ハイフンで長音を入力（連続する母音を1つのハイフンで代替）
+  if (lower === '-') {
+    // 例: "raamen" の位置で、前が 'a' で次も 'a' なら、ハイフンで代替可能
+    if (inputPos > 0) {
+      const prevChar = currentInput[inputPos - 1]?.toLowerCase();
+      if (remaining[0] === prevChar && 'aeiou'.includes(prevChar)) {
+        const newInput = currentInput + prevChar; // 内部的には正しい文字を追加
         return {
           accepted: true,
-          newTyped: typed + lower,
-          romajiProgress: currentPos + 1
+          newInput,
+          completed: newInput.length >= romaji.length
         };
       }
     }
   }
   
-  return { accepted: false, newTyped: typed, romajiProgress: currentPos };
+  // 代替入力パターンをチェック
+  for (let len = 3; len >= 2; len--) {
+    const standardChunk = remaining.substring(0, len);
+    if (charAlternatives[standardChunk]) {
+      for (const alt of charAlternatives[standardChunk]) {
+        // 今入力しようとしている文字が代替パターンの先頭と一致するか
+        if (alt[0] === lower) {
+          // 代替パターンを使って入力を進める
+          const newInput = currentInput + lower;
+          // 完了チェック: 代替パターンの長さ分進んだかどうか
+          // 簡易的に文字数で判定
+          return {
+            accepted: true,
+            newInput,
+            completed: false // 完了判定は別途行う
+          };
+        }
+      }
+    }
+  }
+  
+  return { accepted: false, newInput: currentInput, completed: false };
+}
+
+// 単語が完成したかチェック（柔軟な判定）
+export function isWordComplete(romaji: string, input: string): boolean {
+  // 正規化して比較
+  const normalizedRomaji = normalizeRomaji(romaji);
+  const normalizedInput = normalizeRomaji(input);
+  
+  return normalizedInput === normalizedRomaji;
+}
+
+// ローマ字を正規化（代替入力を標準形式に変換）
+function normalizeRomaji(text: string): string {
+  let result = text.toLowerCase();
+  
+  // 代替入力を標準形式に変換
+  const replacements: [string, string][] = [
+    ['shi', 'si'],
+    ['chi', 'ti'],
+    ['tsu', 'tu'],
+    ['fu', 'hu'],
+    ['ji', 'zi'],
+    ['sha', 'sya'],
+    ['shu', 'syu'],
+    ['sho', 'syo'],
+    ['cha', 'tya'],
+    ['chu', 'tyu'],
+    ['cho', 'tyo'],
+    ['ja', 'zya'],
+    ['ju', 'zyu'],
+    ['jo', 'zyo'],
+  ];
+  
+  for (const [from, to] of replacements) {
+    result = result.split(from).join(to);
+  }
+  
+  return result;
 }

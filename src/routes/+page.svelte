@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import { gameStore, currentEnemy } from '$lib/gameStore';
-  import { difficultySettings, type Difficulty } from '$lib/words';
+  import { difficultySettings, formatRomajiForDisplay, type Difficulty, enemies } from '$lib/words';
 
   let lastTime = 0;
   let animationId: number | undefined;
@@ -57,9 +57,34 @@
   $: enemyHpPercent = ($gameStore.enemyHp / $gameStore.enemyMaxHp) * 100;
   $: timePercent = ($gameStore.timeRemaining / $gameStore.totalTime) * 100;
 
-  // 入力済み/未入力のローマ字を分割
-  $: typedPart = $gameStore.currentWord?.romaji.slice(0, $gameStore.typedText.length) ?? '';
-  $: remainingPart = $gameStore.currentWord?.romaji.slice($gameStore.typedText.length) ?? '';
+  // 入力済み/未入力のローマ字を分割（ハイフン表示対応）
+  $: displayRomaji = $gameStore.currentWord ? formatRomajiForDisplay($gameStore.currentWord.romaji) : '';
+  $: typedPart = displayRomaji.slice(0, $gameStore.typedText.length);
+  $: remainingPart = displayRomaji.slice($gameStore.typedText.length);
+  
+  // 図鑑用：倒したモンスターのカウント（localStorage保存）
+  let defeatedMonsters: Record<string, number> = {};
+  
+  onMount(() => {
+    if (browser) {
+      const saved = localStorage.getItem('defeatedMonsters');
+      if (saved) {
+        defeatedMonsters = JSON.parse(saved);
+      }
+    }
+  });
+  
+  // モンスター撃破時に記録
+  $: if ($gameStore.state === 'clear' && browser) {
+    // 全モンスターをカウント
+    enemies.forEach(e => {
+      defeatedMonsters[e.name] = (defeatedMonsters[e.name] || 0) + 1;
+    });
+    localStorage.setItem('defeatedMonsters', JSON.stringify(defeatedMonsters));
+  }
+  
+  // 図鑑表示フラグ
+  let showEncyclopedia = false;
 </script>
 
 <svelte:head>
@@ -69,12 +94,62 @@
 
 <main>
   <!-- タイトル画面 -->
-  {#if $gameStore.state === 'title'}
+  {#if $gameStore.state === 'title' && !showEncyclopedia}
     <div class="screen title-screen">
       <h1>⚔️ タイピングRPG ⚔️</h1>
       <p class="subtitle">〜 漢字の冒険 〜</p>
       <button class="pixel-btn" on:click={() => gameStore.goToDifficulty()}>
         ▶ はじめる
+      </button>
+      <button class="pixel-btn encyclopedia-btn" on:click={() => showEncyclopedia = true}>
+        📖 ずかん
+      </button>
+    </div>
+
+  <!-- 図鑑画面 -->
+  {:else if showEncyclopedia}
+    <div class="screen encyclopedia-screen">
+      <h2>📖 モンスターずかん</h2>
+      <div class="encyclopedia-grid">
+        {#each enemies as enemy, i}
+          {@const count = defeatedMonsters[enemy.name] || 0}
+          <div class="encyclopedia-entry" class:discovered={count > 0}>
+            <div class="entry-sprite">
+              {#if count > 0}
+                {#if i === 0}
+                  <img src="/enemies/slime.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 1}
+                  <img src="/enemies/bat.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 2}
+                  <img src="/enemies/rat.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 3}
+                  <img src="/enemies/goblin.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 4}
+                  <img src="/enemies/skeleton.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 5}
+                  <img src="/enemies/wolf.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 6}
+                  <img src="/enemies/golem.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 7}
+                  <img src="/enemies/mage.svg" alt={enemy.name} class="entry-img" />
+                {:else if i === 8}
+                  <img src="/enemies/demon.svg" alt={enemy.name} class="entry-img" />
+                {:else}
+                  <img src="/enemies/dragon.svg" alt={enemy.name} class="entry-img" />
+                {/if}
+              {:else}
+                <div class="unknown">？</div>
+              {/if}
+            </div>
+            <div class="entry-info">
+              <div class="entry-name">{count > 0 ? enemy.name : '？？？'}</div>
+              <div class="entry-count">倒した回数: {count}</div>
+            </div>
+          </div>
+        {/each}
+      </div>
+      <button class="pixel-btn back" on:click={() => showEncyclopedia = false}>
+        ◀ もどる
       </button>
     </div>
 
@@ -199,9 +274,12 @@
 
   main {
     min-height: 100vh;
+    width: 100vw;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 1rem;
+    box-sizing: border-box;
   }
 
   .screen {
@@ -211,8 +289,12 @@
     padding: 2rem;
     text-align: center;
     box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
-    min-width: 400px;
-    max-width: 500px;
+    width: 100%;
+    max-width: 800px;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   h1 {
@@ -298,15 +380,15 @@
   }
 
   .enemy-img {
-    width: 80px;
-    height: 80px;
+    width: 128px;
+    height: 128px;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
 
   .enemy-img.dragon {
-    width: 100px;
-    height: 100px;
+    width: 160px;
+    height: 160px;
   }
 
   @keyframes bounce {
@@ -476,5 +558,77 @@
 
   .game-screen {
     position: relative;
+  }
+
+  /* 図鑑ボタン */
+  .encyclopedia-btn {
+    margin-top: 1rem;
+    background: #1e3a5f;
+  }
+
+  /* 図鑑画面 */
+  .encyclopedia-screen {
+    overflow-y: auto;
+  }
+
+  .encyclopedia-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+
+  .encyclopedia-entry {
+    background: #0f3460;
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    opacity: 0.5;
+  }
+
+  .encyclopedia-entry.discovered {
+    opacity: 1;
+    border-color: #e94560;
+  }
+
+  .entry-sprite {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .entry-img {
+    width: 48px;
+    height: 48px;
+    image-rendering: pixelated;
+  }
+
+  .unknown {
+    font-size: 2rem;
+    color: #666;
+  }
+
+  .entry-info {
+    flex: 1;
+    text-align: left;
+  }
+
+  .entry-name {
+    font-size: 1rem;
+    color: #fff;
+    margin-bottom: 0.3rem;
+  }
+
+  .entry-count {
+    font-size: 0.8rem;
+    color: #888;
   }
 </style>
