@@ -2,50 +2,96 @@
   import { onMount, onDestroy } from 'svelte';
   import { browser } from '$app/environment';
   import { gameStore, currentEnemy } from '$lib/gameStore';
-  import { difficultySettings, formatRomajiForDisplay, type Difficulty, enemies } from '$lib/words';
+  import { difficultySettings, type Difficulty, enemies } from '$lib/words';
+  import { 
+    initAudio, startBGM, stopBGM, toggleMute,
+    playTypeSound, playDamageSound, playCompleteSound, 
+    playDefeatSound, playGameOverSound 
+  } from '$lib/audio';
 
-  let lastTime = 0;
-  let animationId: number | undefined;
-
-  // ゲームループ
-  function gameLoop(time: number) {
-    if (lastTime > 0) {
-      const deltaTime = (time - lastTime) / 1000;
-      gameStore.tick(deltaTime);
-    }
-    lastTime = time;
-    animationId = requestAnimationFrame(gameLoop);
-  }
+  let audioInitialized = false;
+  let isMuted = false;
+  let prevEnemyHp = 0;
+  let prevState = 'title';
 
   // キー入力
   function handleKeydown(e: KeyboardEvent) {
-    if ($gameStore.state !== 'playing') return;
-    if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
-      gameStore.type(e.key);
+    if ($gameStore.state !== 'battle') return;
+    
+    // 英字とハイフンを受け付ける
+    if (e.key.length === 1 && /[a-zA-Z\-]/.test(e.key)) {
+      gameStore.typeChar(e.key);
+    }
+  }
+
+  // 音声初期化（ユーザー操作後に呼ぶ必要がある）
+  function initializeAudio() {
+    if (!audioInitialized && browser) {
+      audioInitialized = initAudio();
     }
   }
 
   onMount(() => {
     if (browser) {
-      animationId = requestAnimationFrame(gameLoop);
       window.addEventListener('keydown', handleKeydown);
     }
   });
 
   onDestroy(() => {
     if (browser) {
-      if (animationId !== undefined) {
-        cancelAnimationFrame(animationId);
-      }
       window.removeEventListener('keydown', handleKeydown);
+      stopBGM();
     }
   });
 
   // ダメージフラッシュ監視
-  $: if ($gameStore.damageFlash && browser) {
+  $: if ($gameStore.showDamage && browser) {
+    playDamageSound();
     setTimeout(() => {
-      gameStore.clearDamageFlash();
+      gameStore.clearDamage();
     }, 200);
+  }
+
+  // 状態変化を監視して効果音を再生
+  $: {
+    if (browser && audioInitialized) {
+      // バトル開始
+      if ($gameStore.state === 'battle' && prevState !== 'battle') {
+        startBGM();
+      }
+      // バトル終了
+      if ($gameStore.state !== 'battle' && prevState === 'battle') {
+        stopBGM();
+      }
+      // ゲームオーバー
+      if ($gameStore.state === 'gameover' && prevState !== 'gameover') {
+        playGameOverSound();
+      }
+      // クリア
+      if ($gameStore.state === 'clear' && prevState !== 'clear') {
+        playDefeatSound();
+      }
+      prevState = $gameStore.state;
+    }
+  }
+
+  // 敵のHP変化を監視
+  $: {
+    if (browser && audioInitialized && $gameStore.state === 'battle') {
+      // 敵にダメージ
+      if ($gameStore.enemyHp < prevEnemyHp && $gameStore.enemyHp > 0) {
+        playCompleteSound();
+      }
+      // 敵撃破
+      if (prevEnemyHp > 0 && $gameStore.enemyHp <= 0) {
+        playDefeatSound();
+      }
+      prevEnemyHp = $gameStore.enemyHp;
+    }
+  }
+
+  function handleMuteToggle() {
+    isMuted = toggleMute();
   }
 
   function selectDifficulty(d: Difficulty) {
@@ -53,14 +99,13 @@
   }
 
   // HP バーの幅を計算
-  $: playerHpPercent = ($gameStore.playerHp / $gameStore.playerMaxHp) * 100;
-  $: enemyHpPercent = ($gameStore.enemyHp / $gameStore.enemyMaxHp) * 100;
-  $: timePercent = ($gameStore.timeRemaining / $gameStore.totalTime) * 100;
+  $: playerHpPercent = $gameStore.playerHp;
+  $: enemyHpPercent = $currentEnemy ? ($gameStore.enemyHp / $currentEnemy.hp) * 100 : 0;
+  $: timePercent = $gameStore.maxTime > 0 ? ($gameStore.timeLeft / $gameStore.maxTime) * 100 : 0;
 
-  // 入力済み/未入力のローマ字を分割（ハイフン表示対応）
-  $: displayRomaji = $gameStore.currentWord ? formatRomajiForDisplay($gameStore.currentWord.romaji) : '';
-  $: typedPart = displayRomaji.slice(0, $gameStore.typedText.length);
-  $: remainingPart = displayRomaji.slice($gameStore.typedText.length);
+  // 入力済み/未入力のローマ字を分割
+  $: typedPart = $gameStore.typedText;
+  $: remainingPart = $gameStore.displayRomaji.slice($gameStore.typedText.length);
   
   // 図鑑用：倒したモンスターのカウント（localStorage保存）
   let defeatedMonsters: Record<string, number> = {};
@@ -98,12 +143,17 @@
     <div class="screen title-screen">
       <h1>⚔️ タイピングRPG ⚔️</h1>
       <p class="subtitle">〜 漢字の冒険 〜</p>
-      <button class="pixel-btn" on:click={() => gameStore.goToDifficulty()}>
+      <button class="pixel-btn" on:click={() => { initializeAudio(); gameStore.goToDifficulty(); }}>
         ▶ はじめる
       </button>
       <button class="pixel-btn encyclopedia-btn" on:click={() => showEncyclopedia = true}>
         📖 ずかん
       </button>
+      {#if audioInitialized}
+        <button class="pixel-btn sound-btn" on:click={handleMuteToggle}>
+          {isMuted ? '🔇 おとOFF' : '🔊 おとON'}
+        </button>
+      {/if}
     </div>
 
   <!-- 図鑑画面 -->
@@ -156,26 +206,35 @@
   <!-- 難易度選択 -->
   {:else if $gameStore.state === 'difficulty'}
     <div class="screen difficulty-screen">
-      <h2>難易度を選んでね</h2>
+      <h2>難易度をえらんでね</h2>
       <div class="difficulty-buttons">
         <button class="pixel-btn easy" on:click={() => selectDifficulty('easy')}>
-          🟢 かんたん<br><small>1文字 3.5秒</small>
+          🟢 かんたん
         </button>
         <button class="pixel-btn normal" on:click={() => selectDifficulty('normal')}>
-          🟡 ふつう<br><small>1文字 2.0秒</small>
+          🟡 ふつう
         </button>
         <button class="pixel-btn hard" on:click={() => selectDifficulty('hard')}>
-          🔴 むずかしい<br><small>1文字 1.5秒</small>
+          🔴 むずかしい
         </button>
       </div>
-      <button class="pixel-btn back" on:click={() => gameStore.goToTitle()}>
+      <button class="pixel-btn back" on:click={() => gameStore.reset()}>
         ◀ もどる
       </button>
     </div>
 
-  <!-- ゲーム画面 -->
-  {:else if $gameStore.state === 'playing'}
-    <div class="screen game-screen" class:damage-flash={$gameStore.damageFlash}>
+  <!-- バトル画面 -->
+  {:else if $gameStore.state === 'battle'}
+    <div class="screen game-screen" class:damage-shake={$gameStore.showDamage}>
+      {#if $gameStore.showDamage}
+        <div class="damage-flash"></div>
+      {/if}
+      
+      <!-- サウンドボタン -->
+      <button class="sound-toggle" on:click={handleMuteToggle}>
+        {isMuted ? '🔇' : '🔊'}
+      </button>
+      
       <!-- 敵情報 -->
       <div class="enemy-area">
         <div class="enemy-name">{$currentEnemy?.name}</div>
@@ -204,59 +263,58 @@
         </div>
         <div class="hp-bar enemy-hp">
           <div class="hp-fill" style="width: {enemyHpPercent}%"></div>
-          <span class="hp-text">HP {$gameStore.enemyHp}/{$gameStore.enemyMaxHp}</span>
+          <span class="hp-text">HP: {$gameStore.enemyHp}/{$currentEnemy?.hp}</span>
         </div>
       </div>
 
-      <!-- タイピングエリア -->
-      <div class="typing-area">
+      <!-- 単語表示 -->
+      <div class="word-area">
         <div class="word-display">{$gameStore.currentWord?.display}</div>
         <div class="romaji-display">
           <span class="typed">{typedPart}</span><span class="remaining">{remainingPart}</span>
         </div>
-        <div class="time-bar">
-          <div class="time-fill" style="width: {timePercent}%"></div>
-        </div>
+      </div>
+
+      <!-- タイマー -->
+      <div class="timer-bar">
+        <div class="timer-fill" style="width: {timePercent}%"></div>
       </div>
 
       <!-- プレイヤー情報 -->
       <div class="player-area">
         <div class="hp-bar player-hp">
           <div class="hp-fill" style="width: {playerHpPercent}%"></div>
-          <span class="hp-text">HP {$gameStore.playerHp}/{$gameStore.playerMaxHp}</span>
+          <span class="hp-text">HP: {$gameStore.playerHp}/100</span>
         </div>
         <div class="stats">
-          <span>敵: {$gameStore.currentEnemyIndex + 1}/10</span>
-          <span>ミス: {$gameStore.missCount}</span>
+          <span>コンボ: {$gameStore.combo}</span>
+          <span>スコア: {$gameStore.score}</span>
         </div>
       </div>
     </div>
 
-  <!-- ゲームオーバー -->
-  {:else if $gameStore.state === 'gameover'}
-    <div class="screen result-screen gameover">
-      <h2>💀 ゲームオーバー 💀</h2>
-      <div class="result-stats">
-        <p>倒した敵: {$gameStore.currentEnemyIndex}体</p>
-        <p>ミス: {$gameStore.missCount}回</p>
+  <!-- クリア画面 -->
+  {:else if $gameStore.state === 'clear'}
+    <div class="screen clear-screen">
+      <h1>🎉 クリア！ 🎉</h1>
+      <div class="results">
         <p>スコア: {$gameStore.score}</p>
+        <p>最大コンボ: {$gameStore.maxCombo}</p>
       </div>
-      <button class="pixel-btn" on:click={() => gameStore.goToTitle()}>
+      <button class="pixel-btn" on:click={() => gameStore.reset()}>
         タイトルへ
       </button>
     </div>
 
-  <!-- クリア -->
-  {:else if $gameStore.state === 'clear'}
-    <div class="screen result-screen clear">
-      <h2>🎉 クリア！ 🎉</h2>
-      <div class="result-stats">
-        <p>全10体撃破！</p>
-        <p>ミス: {$gameStore.missCount}回</p>
-        <p>正確率: {$gameStore.totalTyped > 0 ? Math.floor(($gameStore.correctCount / $gameStore.totalTyped) * 100) : 100}%</p>
-        <p class="score">スコア: {$gameStore.score}</p>
+  <!-- ゲームオーバー画面 -->
+  {:else if $gameStore.state === 'gameover'}
+    <div class="screen gameover-screen">
+      <h1>💀 ゲームオーバー 💀</h1>
+      <div class="results">
+        <p>スコア: {$gameStore.score}</p>
+        <p>たおした敵: {$gameStore.currentEnemyIndex}体</p>
       </div>
-      <button class="pixel-btn" on:click={() => gameStore.goToTitle()}>
+      <button class="pixel-btn" on:click={() => gameStore.reset()}>
         タイトルへ
       </button>
     </div>
@@ -298,75 +356,65 @@
   }
 
   h1 {
-    font-size: 2rem;
+    font-size: 2.5rem;
     color: #e94560;
     margin-bottom: 0.5rem;
-    text-shadow: 2px 2px #0f3460;
+    text-shadow: 2px 2px 0 #0f3460;
   }
 
   h2 {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     color: #e94560;
     margin-bottom: 1.5rem;
   }
 
   .subtitle {
-    color: #aaa;
+    font-size: 1.2rem;
+    color: #888;
     margin-bottom: 2rem;
   }
 
   .pixel-btn {
     font-family: 'DotGothic16', sans-serif;
-    font-size: 1.1rem;
-    padding: 0.8rem 2rem;
-    background: #0f3460;
-    color: #fff;
-    border: 3px solid #e94560;
+    font-size: 1.2rem;
+    padding: 1rem 2rem;
+    background: #e94560;
+    color: white;
+    border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.1s;
+    transition: all 0.2s;
     margin: 0.5rem;
   }
 
   .pixel-btn:hover {
-    background: #e94560;
+    background: #ff6b6b;
     transform: scale(1.05);
   }
 
   .pixel-btn.back {
-    background: #333;
-    border-color: #666;
-    font-size: 0.9rem;
+    background: #0f3460;
+    font-size: 1rem;
     margin-top: 1.5rem;
   }
+
+  .pixel-btn.easy { background: #22c55e; }
+  .pixel-btn.normal { background: #eab308; }
+  .pixel-btn.hard { background: #ef4444; }
 
   .difficulty-buttons {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    margin: 1.5rem 0;
-  }
-
-  .difficulty-buttons .pixel-btn {
-    padding: 1rem;
-  }
-
-  .difficulty-buttons .pixel-btn small {
-    font-size: 0.8rem;
-    color: #aaa;
-  }
-
-  /* ゲーム画面 */
-  .game-screen {
-    min-width: 450px;
+    align-items: center;
   }
 
   .enemy-area {
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
   }
 
   .enemy-name {
-    font-size: 1.3rem;
+    font-size: 1.5rem;
     color: #e94560;
     margin-bottom: 0.5rem;
   }
@@ -399,24 +447,24 @@
   .hp-bar {
     height: 24px;
     background: #333;
-    border: 2px solid #666;
     border-radius: 4px;
     position: relative;
     overflow: hidden;
-    margin: 0.5rem 0;
+    margin: 0.5rem auto;
+    max-width: 300px;
   }
 
   .hp-fill {
     height: 100%;
-    transition: width 0.2s;
+    transition: width 0.3s;
   }
 
   .enemy-hp .hp-fill {
-    background: linear-gradient(to bottom, #e94560, #c73e54);
+    background: linear-gradient(to right, #ef4444, #f97316);
   }
 
   .player-hp .hp-fill {
-    background: linear-gradient(to bottom, #4ade80, #22c55e);
+    background: linear-gradient(to right, #22c55e, #4ade80);
   }
 
   .hp-text {
@@ -425,133 +473,104 @@
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 0.9rem;
-    text-shadow: 1px 1px 2px #000;
+    color: white;
+    text-shadow: 1px 1px 0 black;
   }
 
-  .typing-area {
-    background: #0f3460;
-    border: 3px solid #e94560;
-    border-radius: 8px;
+  .word-area {
+    margin: 2rem 0;
     padding: 1.5rem;
-    margin: 1.5rem 0;
+    background: #0f3460;
+    border-radius: 8px;
   }
 
   .word-display {
-    font-size: 2.5rem;
-    color: #fff;
+    font-size: 3rem;
     margin-bottom: 1rem;
+    color: white;
   }
 
   .romaji-display {
-    font-size: 1.8rem;
-    font-family: monospace;
-    letter-spacing: 2px;
+    font-size: 2rem;
+    letter-spacing: 0.1em;
   }
 
   .typed {
-    color: #4ade80;
+    color: #22c55e;
   }
 
   .remaining {
     color: #888;
   }
 
-  .time-bar {
+  .timer-bar {
     height: 12px;
     background: #333;
-    border-radius: 6px;
-    margin-top: 1rem;
+    border-radius: 4px;
     overflow: hidden;
+    margin: 1rem auto;
+    max-width: 400px;
   }
 
-  .time-fill {
+  .timer-fill {
     height: 100%;
-    background: linear-gradient(to right, #fbbf24, #f59e0b);
+    background: linear-gradient(to right, #3b82f6, #60a5fa);
     transition: width 0.1s linear;
   }
 
   .player-area {
-    margin-top: 1rem;
+    margin-top: 2rem;
   }
 
   .stats {
     display: flex;
-    justify-content: space-around;
-    margin-top: 0.5rem;
-    color: #aaa;
-    font-size: 0.9rem;
-  }
-
-  /* 結果画面 */
-  .result-screen {
-    min-width: 350px;
-  }
-
-  .result-screen.gameover h2 {
-    color: #888;
-  }
-
-  .result-screen.clear h2 {
-    color: #fbbf24;
-    animation: pulse 0.5s infinite alternate;
-  }
-
-  @keyframes pulse {
-    from { transform: scale(1); }
-    to { transform: scale(1.05); }
-  }
-
-  .result-stats {
-    background: #0f3460;
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin: 1.5rem 0;
-  }
-
-  .result-stats p {
-    margin: 0.5rem 0;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
     font-size: 1.1rem;
   }
 
-  .result-stats .score {
+  .results {
     font-size: 1.5rem;
-    color: #fbbf24;
-    margin-top: 1rem;
+    margin: 2rem 0;
+  }
+
+  .results p {
+    margin: 0.5rem 0;
+  }
+
+  .clear-screen h1 {
+    color: #22c55e;
+  }
+
+  .gameover-screen h1 {
+    color: #ef4444;
   }
 
   /* ダメージエフェクト */
-  .damage-flash {
-    animation: damage-shake 0.2s ease-in-out, damage-red 0.2s ease-in-out;
+  .damage-shake {
+    animation: shake 0.2s ease-in-out;
   }
 
-  @keyframes damage-shake {
+  @keyframes shake {
     0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-10px); }
-    40% { transform: translateX(10px); }
-    60% { transform: translateX(-10px); }
-    80% { transform: translateX(10px); }
+    25% { transform: translateX(-10px); }
+    50% { transform: translateX(10px); }
+    75% { transform: translateX(-5px); }
   }
 
-  @keyframes damage-red {
-    0%, 100% { box-shadow: 0 0 20px rgba(233, 69, 96, 0.3); }
-    50% { box-shadow: 0 0 60px rgba(255, 0, 0, 0.8), inset 0 0 100px rgba(255, 0, 0, 0.3); }
-  }
-
-  /* ダメージ時の画面全体の赤フラッシュ */
-  .game-screen.damage-flash::before {
-    content: '';
+  .damage-flash {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255, 0, 0, 0.3);
-    animation: flash-fade 0.2s ease-out;
+    background: rgba(239, 68, 68, 0.3);
     pointer-events: none;
-    border-radius: 8px;
+    animation: flash 0.2s ease-out;
   }
 
-  @keyframes flash-fade {
+  @keyframes flash {
     0% { opacity: 1; }
     100% { opacity: 0; }
   }
@@ -630,5 +649,29 @@
   .entry-count {
     font-size: 0.8rem;
     color: #888;
+  }
+
+  /* サウンドボタン */
+  .sound-btn {
+    margin-top: 1rem;
+    background: #334155;
+    font-size: 1rem;
+  }
+
+  .sound-toggle {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid #e94560;
+    border-radius: 8px;
+    font-size: 1.5rem;
+    padding: 0.5rem;
+    cursor: pointer;
+    z-index: 100;
+  }
+
+  .sound-toggle:hover {
+    background: rgba(233, 69, 96, 0.3);
   }
 </style>

@@ -1,251 +1,278 @@
 import { writable, derived } from 'svelte/store';
 import { enemies, getRandomWord, difficultySettings, type Difficulty, type Word, type Enemy } from './words';
-import { canTypeNextChar, isWordComplete } from './romajiMap';
+import { RomajiChecker, getDisplayRomaji } from './romajiConverter';
 
-// ゲーム状態
-export type GameState = 'title' | 'difficulty' | 'playing' | 'gameover' | 'clear' | 'ranking';
+type GameState = 'title' | 'difficulty' | 'battle' | 'clear' | 'gameover';
 
 interface GameData {
   state: GameState;
   difficulty: Difficulty;
-  playerHp: number;
-  playerMaxHp: number;
   currentEnemyIndex: number;
   enemyHp: number;
-  enemyMaxHp: number;
+  playerHp: number;
   currentWord: Word | null;
+  displayRomaji: string;
   typedText: string;
-  acceptedInput: string;  // 実際に受け入れられた入力
-  timeRemaining: number;
-  totalTime: number;
+  timeLeft: number;
+  maxTime: number;
+  combo: number;
+  maxCombo: number;
   score: number;
-  missCount: number;
-  correctCount: number;
-  totalTyped: number;
-  startTime: number | null;
-  endTime: number | null;
-  damageFlash: boolean;  // ダメージエフェクト用
+  showDamage: boolean;
 }
 
 const initialState: GameData = {
   state: 'title',
   difficulty: 'normal',
-  playerHp: 100,
-  playerMaxHp: 100,
   currentEnemyIndex: 0,
-  enemyHp: 50,
-  enemyMaxHp: 50,
+  enemyHp: 0,
+  playerHp: 100,
   currentWord: null,
+  displayRomaji: '',
   typedText: '',
-  acceptedInput: '',
-  timeRemaining: 100,
-  totalTime: 0,
+  timeLeft: 0,
+  maxTime: 0,
+  combo: 0,
+  maxCombo: 0,
   score: 0,
-  missCount: 0,
-  correctCount: 0,
-  totalTyped: 0,
-  startTime: null,
-  endTime: null,
-  damageFlash: false,
+  showDamage: false,
 };
 
 function createGameStore() {
   const { subscribe, set, update } = writable<GameData>(initialState);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let romajiChecker: RomajiChecker | null = null;
+
+  function clearTimer() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function startTimer() {
+    clearTimer();
+    timer = setInterval(() => {
+      update(state => {
+        if (state.state !== 'battle') {
+          clearTimer();
+          return state;
+        }
+        
+        const newTimeLeft = state.timeLeft - 0.1;
+        
+        if (newTimeLeft <= 0) {
+          // 時間切れ = プレイヤーにダメージ
+          const newPlayerHp = state.playerHp - 20;
+          
+          if (newPlayerHp <= 0) {
+            clearTimer();
+            return { ...state, state: 'gameover' as const, playerHp: 0, combo: 0, showDamage: true };
+          }
+          
+          // 新しい単語を出題
+          const enemy = enemies[state.currentEnemyIndex];
+          const newWord = getRandomWord(enemy.level);
+          const displayRomaji = getDisplayRomaji(newWord.reading);
+          romajiChecker = new RomajiChecker(newWord.reading);
+          const charCount = newWord.reading.length;
+          const maxTime = charCount * difficultySettings[state.difficulty];
+          
+          return {
+            ...state,
+            playerHp: newPlayerHp,
+            currentWord: newWord,
+            displayRomaji,
+            typedText: '',
+            timeLeft: maxTime,
+            maxTime,
+            combo: 0,
+            showDamage: true,
+          };
+        }
+        
+        return { ...state, timeLeft: newTimeLeft, showDamage: false };
+      });
+    }, 100);
+  }
+
+  function setNextWord() {
+    update(state => {
+      const enemy = enemies[state.currentEnemyIndex];
+      const newWord = getRandomWord(enemy.level);
+      const displayRomaji = getDisplayRomaji(newWord.reading);
+      romajiChecker = new RomajiChecker(newWord.reading);
+      const charCount = newWord.reading.length;
+      const maxTime = charCount * difficultySettings[state.difficulty];
+      
+      return {
+        ...state,
+        currentWord: newWord,
+        displayRomaji,
+        typedText: '',
+        timeLeft: maxTime,
+        maxTime,
+        showDamage: false,
+      };
+    });
+  }
 
   return {
     subscribe,
     
-    // タイトルに戻る
-    goToTitle: () => set(initialState),
+    goToDifficulty: () => {
+      update(state => ({ ...state, state: 'difficulty' }));
+    },
     
-    // 難易度選択画面へ
-    goToDifficulty: () => update(s => ({ ...s, state: 'difficulty' })),
-    
-    // ゲーム開始
-    startGame: (difficulty: Difficulty) => update(s => {
+    startGame: (difficulty: Difficulty) => {
       const enemy = enemies[0];
       const word = getRandomWord(enemy.level);
-      const timePerChar = difficultySettings[difficulty];
-      return {
-        ...initialState,
-        state: 'playing',
+      const displayRomaji = getDisplayRomaji(word.reading);
+      romajiChecker = new RomajiChecker(word.reading);
+      const charCount = word.reading.length;
+      const maxTime = charCount * difficultySettings[difficulty];
+      
+      set({
+        state: 'battle',
         difficulty,
-        currentWord: word,
-        typedText: '',
-        acceptedInput: '',
-        timeRemaining: word.romaji.length * timePerChar,
-        totalTime: word.romaji.length * timePerChar,
+        currentEnemyIndex: 0,
         enemyHp: enemy.hp,
-        enemyMaxHp: enemy.hp,
-        startTime: Date.now(),
-        damageFlash: false,
-      };
-    }),
+        playerHp: 100,
+        currentWord: word,
+        displayRomaji,
+        typedText: '',
+        timeLeft: maxTime,
+        maxTime,
+        combo: 0,
+        maxCombo: 0,
+        score: 0,
+        showDamage: false,
+      });
+      
+      startTimer();
+    },
     
-    // タイプ入力
-    type: (char: string) => update(s => {
-      if (s.state !== 'playing' || !s.currentWord) return s;
+    typeChar: (char: string) => {
+      if (!romajiChecker) return;
       
-      const totalTyped = s.totalTyped + 1;
-      const romaji = s.currentWord.romaji.toLowerCase();
-      const input = char.toLowerCase();
-      
-      // 柔軟なローマ字入力チェック
-      const isCorrect = canTypeNextChar(romaji, s.acceptedInput, input);
-      
-      // 正解
-      if (isCorrect) {
-        const newAcceptedInput = s.acceptedInput + input;
-        const correctCount = s.correctCount + 1;
+      update(state => {
+        if (state.state !== 'battle' || !state.currentWord) return state;
         
-        // 単語完成チェック（柔軟に判定）
-        const isComplete = isWordComplete(romaji, newAcceptedInput);
+        const result = romajiChecker!.processKey(char);
         
-        if (isComplete) {
-          const damage = 10;
-          const newEnemyHp = s.enemyHp - damage;
+        if (!result.accepted) {
+          // ミス！プレイヤーにダメージ
+          const newPlayerHp = state.playerHp - 5;
           
-          // 敵を倒した
+          if (newPlayerHp <= 0) {
+            clearTimer();
+            return { ...state, state: 'gameover' as const, playerHp: 0, combo: 0, showDamage: true };
+          }
+          
+          return { ...state, playerHp: newPlayerHp, combo: 0, showDamage: true };
+        }
+        
+        // 入力成功
+        const newTypedText = romajiChecker!.getTypedRomaji();
+        
+        if (result.completed) {
+          // 単語完成！敵にダメージ
+          const newCombo = state.combo + 1;
+          const damage = 10 + newCombo * 2;
+          const newEnemyHp = state.enemyHp - damage;
+          const newMaxCombo = Math.max(state.maxCombo, newCombo);
+          const newScore = state.score + damage + Math.floor(state.timeLeft * 10);
+          
           if (newEnemyHp <= 0) {
-            const nextIndex = s.currentEnemyIndex + 1;
+            // 敵を倒した！
+            const nextEnemyIndex = state.currentEnemyIndex + 1;
             
-            // 全クリア
-            if (nextIndex >= enemies.length) {
+            if (nextEnemyIndex >= enemies.length) {
+              // 全クリア！
+              clearTimer();
               return {
-                ...s,
-                state: 'clear',
-                score: calculateScore(s),
-                correctCount,
-                totalTyped,
-                endTime: Date.now(),
+                ...state,
+                state: 'clear' as const,
+                enemyHp: 0,
+                combo: newCombo,
+                maxCombo: newMaxCombo,
+                score: newScore,
+                showDamage: false,
               };
             }
             
             // 次の敵
-            const nextEnemy = enemies[nextIndex];
+            const nextEnemy = enemies[nextEnemyIndex];
             const nextWord = getRandomWord(nextEnemy.level);
-            const timePerChar = difficultySettings[s.difficulty];
+            const nextDisplayRomaji = getDisplayRomaji(nextWord.reading);
+            romajiChecker = new RomajiChecker(nextWord.reading);
+            const charCount = nextWord.reading.length;
+            const maxTime = charCount * difficultySettings[state.difficulty];
+            
             return {
-              ...s,
-              currentEnemyIndex: nextIndex,
+              ...state,
+              currentEnemyIndex: nextEnemyIndex,
               enemyHp: nextEnemy.hp,
-              enemyMaxHp: nextEnemy.hp,
               currentWord: nextWord,
+              displayRomaji: nextDisplayRomaji,
               typedText: '',
-              acceptedInput: '',
-              timeRemaining: nextWord.romaji.length * timePerChar,
-              totalTime: nextWord.romaji.length * timePerChar,
-              correctCount,
-              totalTyped,
+              timeLeft: maxTime,
+              maxTime,
+              combo: newCombo,
+              maxCombo: newMaxCombo,
+              score: newScore,
+              showDamage: false,
             };
           }
           
-          // 同じ敵に次の単語
-          const enemy = enemies[s.currentEnemyIndex];
+          // 敵はまだ生きている、次の単語
+          const enemy = enemies[state.currentEnemyIndex];
           const nextWord = getRandomWord(enemy.level);
-          const timePerChar = difficultySettings[s.difficulty];
+          const nextDisplayRomaji = getDisplayRomaji(nextWord.reading);
+          romajiChecker = new RomajiChecker(nextWord.reading);
+          const charCount = nextWord.reading.length;
+          const maxTime = charCount * difficultySettings[state.difficulty];
+          
           return {
-            ...s,
+            ...state,
             enemyHp: newEnemyHp,
             currentWord: nextWord,
+            displayRomaji: nextDisplayRomaji,
             typedText: '',
-            acceptedInput: '',
-            timeRemaining: nextWord.romaji.length * timePerChar,
-            totalTime: nextWord.romaji.length * timePerChar,
-            correctCount,
-            totalTyped,
+            timeLeft: maxTime,
+            maxTime,
+            combo: newCombo,
+            maxCombo: newMaxCombo,
+            score: newScore,
+            showDamage: false,
           };
         }
         
-        return { ...s, typedText: s.typedText + char, acceptedInput: newAcceptedInput, correctCount, totalTyped };
-      }
-      
-      // ミス
-      const missCount = s.missCount + 1;
-      const newPlayerHp = s.playerHp - 10;
-      
-      if (newPlayerHp <= 0) {
+        // 単語は未完成、入力を続ける
         return {
-          ...s,
-          state: 'gameover',
-          playerHp: 0,
-          missCount,
-          totalTyped,
-          score: calculateScore(s),
-          damageFlash: true,
-          endTime: Date.now(),
+          ...state,
+          typedText: newTypedText,
+          showDamage: false,
         };
-      }
-      
-      return { ...s, playerHp: newPlayerHp, missCount, totalTyped, damageFlash: true };
-    }),
+      });
+    },
     
-    // ダメージフラッシュをリセット
-    clearDamageFlash: () => update(s => ({ ...s, damageFlash: false })),
+    clearDamage: () => {
+      update(state => ({ ...state, showDamage: false }));
+    },
     
-    // 時間経過
-    tick: (deltaTime: number) => update(s => {
-      if (s.state !== 'playing') return s;
-      
-      const newTime = s.timeRemaining - deltaTime;
-      
-      if (newTime <= 0) {
-        const newPlayerHp = s.playerHp - 10;
-        
-        if (newPlayerHp <= 0) {
-          return {
-            ...s,
-            state: 'gameover',
-            playerHp: 0,
-            timeRemaining: 0,
-            score: calculateScore(s),
-            damageFlash: true,
-            endTime: Date.now(),
-          };
-        }
-        
-        // 次の単語
-        const enemy = enemies[s.currentEnemyIndex];
-        const nextWord = getRandomWord(enemy.level);
-        const timePerChar = difficultySettings[s.difficulty];
-        return {
-          ...s,
-          playerHp: newPlayerHp,
-          currentWord: nextWord,
-          typedText: '',
-          acceptedInput: '',
-          timeRemaining: nextWord.romaji.length * timePerChar,
-          totalTime: nextWord.romaji.length * timePerChar,
-          damageFlash: true,
-        };
-      }
-      
-      return { ...s, timeRemaining: newTime };
-    }),
-    
-    // ランキング画面へ
-    goToRanking: () => update(s => ({ ...s, state: 'ranking' })),
+    reset: () => {
+      clearTimer();
+      romajiChecker = null;
+      set(initialState);
+    },
   };
-}
-
-function calculateScore(s: GameData): number {
-  const baseScore = 10000;
-  const accuracy = s.totalTyped > 0 ? s.correctCount / s.totalTyped : 0;
-  const accuracyBonus = Math.floor(accuracy * 10000);
-  const missPenalty = s.missCount * 100;
-  
-  const difficultyMultiplier = {
-    easy: 1.0,
-    normal: 1.5,
-    hard: 2.0,
-  }[s.difficulty];
-  
-  return Math.floor((baseScore + accuracyBonus - missPenalty) * difficultyMultiplier);
 }
 
 export const gameStore = createGameStore();
 
-// 現在の敵を取得
 export const currentEnemy = derived(gameStore, $game => 
-  $game.currentEnemyIndex < enemies.length ? enemies[$game.currentEnemyIndex] : null
+  $game.state === 'battle' || $game.state === 'clear' || $game.state === 'gameover'
+    ? enemies[$game.currentEnemyIndex] 
+    : null
 );
