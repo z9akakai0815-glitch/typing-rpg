@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { browser } from '$app/environment';
   import { gameStore, currentEnemy } from '$lib/gameStore';
   import { difficultySettings, type Difficulty } from '$lib/words';
 
   let lastTime = 0;
-  let animationId: number;
+  let animationId: number | undefined;
 
   // ゲームループ
   function gameLoop(time: number) {
@@ -25,13 +26,19 @@
   }
 
   onMount(() => {
-    animationId = requestAnimationFrame(gameLoop);
-    window.addEventListener('keydown', handleKeydown);
+    if (browser) {
+      animationId = requestAnimationFrame(gameLoop);
+      window.addEventListener('keydown', handleKeydown);
+    }
   });
 
   onDestroy(() => {
-    cancelAnimationFrame(animationId);
-    window.removeEventListener('keydown', handleKeydown);
+    if (browser) {
+      if (animationId !== undefined) {
+        cancelAnimationFrame(animationId);
+      }
+      window.removeEventListener('keydown', handleKeydown);
+    }
   });
 
   function selectDifficulty(d: Difficulty) {
