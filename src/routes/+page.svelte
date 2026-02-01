@@ -41,6 +41,13 @@
     }
   });
 
+  // ダメージフラッシュ監視
+  $: if ($gameStore.damageFlash && browser) {
+    setTimeout(() => {
+      gameStore.clearDamageFlash();
+    }, 200);
+  }
+
   function selectDifficulty(d: Difficulty) {
     gameStore.startGame(d);
   }
@@ -93,7 +100,7 @@
 
   <!-- ゲーム画面 -->
   {:else if $gameStore.state === 'playing'}
-    <div class="screen game-screen">
+    <div class="screen game-screen" class:damage-flash={$gameStore.damageFlash}>
       <!-- 敵情報 -->
       <div class="enemy-area">
         <div class="enemy-name">{$currentEnemy?.name}</div>
@@ -404,5 +411,46 @@
     font-size: 1.5rem;
     color: #fbbf24;
     margin-top: 1rem;
+  }
+
+  /* ダメージエフェクト */
+  .damage-flash {
+    animation: damage-shake 0.2s ease-in-out, damage-red 0.2s ease-in-out;
+  }
+
+  @keyframes damage-shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-10px); }
+    80% { transform: translateX(10px); }
+  }
+
+  @keyframes damage-red {
+    0%, 100% { box-shadow: 0 0 20px rgba(233, 69, 96, 0.3); }
+    50% { box-shadow: 0 0 60px rgba(255, 0, 0, 0.8), inset 0 0 100px rgba(255, 0, 0, 0.3); }
+  }
+
+  /* ダメージ時の画面全体の赤フラッシュ */
+  .game-screen.damage-flash::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 0, 0, 0.3);
+    animation: flash-fade 0.2s ease-out;
+    pointer-events: none;
+    border-radius: 8px;
+  }
+
+  @keyframes flash-fade {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .game-screen {
+    position: relative;
   }
 </style>

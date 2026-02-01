@@ -1,5 +1,33 @@
 import { writable, derived } from 'svelte/store';
 import { enemies, getRandomWord, difficultySettings, type Difficulty, type Word, type Enemy } from './words';
+import { canTypeNextChar } from './romajiMap';
+
+// 単語完成チェック（柔軟な入力対応）
+function isWordComplete(romaji: string, input: string): boolean {
+  // 代替入力のマッピング
+  const alternatives: [string, string][] = [
+    ['shi', 'si'], ['sha', 'sya'], ['shu', 'syu'], ['sho', 'syo'],
+    ['chi', 'ti'], ['cha', 'tya'], ['chu', 'tyu'], ['cho', 'tyo'],
+    ['tsu', 'tu'], ['fu', 'hu'],
+    ['ji', 'zi'], ['ja', 'zya'], ['ju', 'zyu'], ['jo', 'zyo'],
+    ['zu', 'du'],
+  ];
+  
+  // 正規化: 入力を標準形式に変換
+  let normalized = input.toLowerCase();
+  for (const [standard, alt] of alternatives) {
+    // 代替入力を標準形式に置換
+    normalized = normalized.split(alt).join(standard);
+  }
+  
+  // 標準形式と比較
+  if (normalized === romaji.toLowerCase()) {
+    return true;
+  }
+  
+  // 入力長で簡易チェック
+  return input.length >= romaji.length;
+}
 
 // ゲーム状態
 export type GameState = 'title' | 'difficulty' | 'playing' | 'gameover' | 'clear' | 'ranking';
@@ -14,6 +42,7 @@ interface GameData {
   enemyMaxHp: number;
   currentWord: Word | null;
   typedText: string;
+  acceptedInput: string;  // 実際に受け入れられた入力
   timeRemaining: number;
   totalTime: number;
   score: number;
@@ -22,6 +51,7 @@ interface GameData {
   totalTyped: number;
   startTime: number | null;
   endTime: number | null;
+  damageFlash: boolean;  // ダメージエフェクト用
 }
 
 const initialState: GameData = {
@@ -34,6 +64,7 @@ const initialState: GameData = {
   enemyMaxHp: 50,
   currentWord: null,
   typedText: '',
+  acceptedInput: '',
   timeRemaining: 100,
   totalTime: 0,
   score: 0,
@@ -42,6 +73,7 @@ const initialState: GameData = {
   totalTyped: 0,
   startTime: null,
   endTime: null,
+  damageFlash: false,
 };
 
 function createGameStore() {
@@ -66,11 +98,14 @@ function createGameStore() {
         state: 'playing',
         difficulty,
         currentWord: word,
+        typedText: '',
+        acceptedInput: '',
         timeRemaining: word.romaji.length * timePerChar,
         totalTime: word.romaji.length * timePerChar,
         enemyHp: enemy.hp,
         enemyMaxHp: enemy.hp,
         startTime: Date.now(),
+        damageFlash: false,
       };
     }),
     
@@ -78,16 +113,22 @@ function createGameStore() {
     type: (char: string) => update(s => {
       if (s.state !== 'playing' || !s.currentWord) return s;
       
-      const expectedChar = s.currentWord.romaji[s.typedText.length];
-      const newTypedText = s.typedText + char;
       const totalTyped = s.totalTyped + 1;
+      const romaji = s.currentWord.romaji.toLowerCase();
+      const input = char.toLowerCase();
+      
+      // 柔軟なローマ字入力チェック
+      const isCorrect = canTypeNextChar(romaji, s.acceptedInput, input);
       
       // 正解
-      if (char.toLowerCase() === expectedChar.toLowerCase()) {
+      if (isCorrect) {
+        const newAcceptedInput = s.acceptedInput + input;
         const correctCount = s.correctCount + 1;
         
-        // 単語完成
-        if (newTypedText.length === s.currentWord.romaji.length) {
+        // 単語完成チェック（柔軟に判定）
+        const isComplete = isWordComplete(romaji, newAcceptedInput);
+        
+        if (isComplete) {
           const damage = 10;
           const newEnemyHp = s.enemyHp - damage;
           
@@ -118,6 +159,7 @@ function createGameStore() {
               enemyMaxHp: nextEnemy.hp,
               currentWord: nextWord,
               typedText: '',
+              acceptedInput: '',
               timeRemaining: nextWord.romaji.length * timePerChar,
               totalTime: nextWord.romaji.length * timePerChar,
               correctCount,
@@ -134,6 +176,7 @@ function createGameStore() {
             enemyHp: newEnemyHp,
             currentWord: nextWord,
             typedText: '',
+            acceptedInput: '',
             timeRemaining: nextWord.romaji.length * timePerChar,
             totalTime: nextWord.romaji.length * timePerChar,
             correctCount,
@@ -141,7 +184,7 @@ function createGameStore() {
           };
         }
         
-        return { ...s, typedText: newTypedText, correctCount, totalTyped };
+        return { ...s, typedText: s.typedText + char, acceptedInput: newAcceptedInput, correctCount, totalTyped };
       }
       
       // ミス
@@ -156,12 +199,16 @@ function createGameStore() {
           missCount,
           totalTyped,
           score: calculateScore(s),
+          damageFlash: true,
           endTime: Date.now(),
         };
       }
       
-      return { ...s, playerHp: newPlayerHp, missCount, totalTyped };
+      return { ...s, playerHp: newPlayerHp, missCount, totalTyped, damageFlash: true };
     }),
+    
+    // ダメージフラッシュをリセット
+    clearDamageFlash: () => update(s => ({ ...s, damageFlash: false })),
     
     // 時間経過
     tick: (deltaTime: number) => update(s => {
@@ -179,6 +226,7 @@ function createGameStore() {
             playerHp: 0,
             timeRemaining: 0,
             score: calculateScore(s),
+            damageFlash: true,
             endTime: Date.now(),
           };
         }
@@ -192,8 +240,10 @@ function createGameStore() {
           playerHp: newPlayerHp,
           currentWord: nextWord,
           typedText: '',
+          acceptedInput: '',
           timeRemaining: nextWord.romaji.length * timePerChar,
           totalTime: nextWord.romaji.length * timePerChar,
+          damageFlash: true,
         };
       }
       
