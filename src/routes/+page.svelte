@@ -105,16 +105,26 @@
       <div class="enemy-area">
         <div class="enemy-name">{$currentEnemy?.name}</div>
         <div class="enemy-sprite">
-          {#if $gameStore.currentEnemyIndex === 0}👾
-          {:else if $gameStore.currentEnemyIndex === 1}🦇
-          {:else if $gameStore.currentEnemyIndex === 2}🐀
-          {:else if $gameStore.currentEnemyIndex === 3}👺
-          {:else if $gameStore.currentEnemyIndex === 4}💀
-          {:else if $gameStore.currentEnemyIndex === 5}🐺
-          {:else if $gameStore.currentEnemyIndex === 6}🗿
-          {:else if $gameStore.currentEnemyIndex === 7}🧙
-          {:else if $gameStore.currentEnemyIndex === 8}👿
-          {:else}🐉
+          {#if $gameStore.currentEnemyIndex === 0}
+            <img src="/enemies/slime.svg" alt="スライム" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 1}
+            <img src="/enemies/bat.svg" alt="コウモリ" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 2}
+            <img src="/enemies/rat.svg" alt="おおねずみ" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 3}
+            <img src="/enemies/goblin.svg" alt="ゴブリン" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 4}
+            <img src="/enemies/skeleton.svg" alt="ガイコツ" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 5}
+            <img src="/enemies/wolf.svg" alt="オオカミ" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 6}
+            <img src="/enemies/golem.svg" alt="ゴーレム" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 7}
+            <img src="/enemies/mage.svg" alt="まどうし" class="enemy-img" />
+          {:else if $gameStore.currentEnemyIndex === 8}
+            <img src="/enemies/demon.svg" alt="デーモン" class="enemy-img" />
+          {:else}
+            <img src="/enemies/dragon.svg" alt="ドラゴン" class="enemy-img dragon" />
           {/if}
         </div>
         <div class="hp-bar enemy-hp">
@@ -280,9 +290,23 @@
   }
 
   .enemy-sprite {
-    font-size: 5rem;
     margin: 1rem 0;
     animation: bounce 1s infinite;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .enemy-img {
+    width: 80px;
+    height: 80px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .enemy-img.dragon {
+    width: 100px;
+    height: 100px;
   }
 
   @keyframes bounce {

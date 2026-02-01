@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="64" height="64">
+  <!-- ドラゴン - ラスボス -->
+  <style>
+    .body { fill: #15803d; }
+    .dark { fill: #166534; }
+    .belly { fill: #fbbf24; }
+    .eye { fill: #ef4444; }
+    .horn { fill: #f5f5f4; }
+    .wing { fill: #14532d; }
+  </style>
+  <!-- 角 -->
+  <rect x="4" y="0" width="1" height="2" class="horn"/>
+  <rect x="7" y="0" width="1" height="1" class="horn"/>
+  <rect x="10" y="0" width="1" height="2" class="horn"/>
+  <!-- 頭 -->
+  <rect x="3" y="2" width="9" height="4" class="body"/>
+  <rect x="2" y="3" width="1" height="2" class="body"/>
+  <rect x="12" y="3" width="2" height="3" class="body"/>
+  <!-- 目 -->
+  <rect x="5" y="3" width="2" height="2" class="eye"/>
+  <rect x="9" y="3" width="2" height="2" class="eye"/>
+  <!-- 牙 -->
+  <rect x="13" y="5" width="1" height="2" class="horn"/>
+  <!-- 体 -->
+  <rect x="2" y="6" width="10" height="5" class="body"/>
+  <rect x="1" y="7" width="1" height="3" class="dark"/>
+  <!-- 腹 -->
+  <rect x="4" y="7" width="5" height="3" class="belly"/>
+  <!-- 翼 -->
+  <rect x="12" y="4" width="3" height="5" class="wing"/>
+  <rect x="15" y="5" width="1" height="3" class="wing"/>
+  <rect x="13" y="3" width="2" height="1" class="wing"/>
+  <!-- しっぽ -->
+  <rect x="0" y="8" width="2" height="2" class="dark"/>
+  <rect x="0" y="7" width="1" height="1" class="dark"/>
+  <!-- 足 -->
+  <rect x="3" y="11" width="2" height="3" class="dark"/>
+  <rect x="8" y="11" width="2" height="3" class="dark"/>
+  <!-- 爪 -->
+  <rect x="2" y="14" width="1" height="1" class="horn"/>
+  <rect x="5" y="14" width="1" height="1" class="horn"/>
+  <rect x="7" y="14" width="1" height="1" class="horn"/>
+  <rect x="10" y="14" width="1" height="1" class="horn"/>
+</svg>

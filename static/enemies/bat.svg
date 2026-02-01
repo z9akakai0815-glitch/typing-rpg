@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="64" height="64">
+  <!-- コウモリ -->
+  <style>
+    .body { fill: #6b21a8; }
+    .wing { fill: #581c87; }
+    .eye { fill: #fbbf24; }
+  </style>
+  <!-- 翼左 -->
+  <rect x="1" y="6" width="1" height="3" class="wing"/>
+  <rect x="2" y="5" width="1" height="4" class="wing"/>
+  <rect x="3" y="4" width="1" height="5" class="wing"/>
+  <rect x="4" y="5" width="1" height="4" class="wing"/>
+  <!-- 翼右 -->
+  <rect x="14" y="6" width="1" height="3" class="wing"/>
+  <rect x="13" y="5" width="1" height="4" class="wing"/>
+  <rect x="12" y="4" width="1" height="5" class="wing"/>
+  <rect x="11" y="5" width="1" height="4" class="wing"/>
+  <!-- 本体 -->
+  <rect x="5" y="5" width="6" height="5" class="body"/>
+  <rect x="6" y="4" width="4" height="1" class="body"/>
+  <rect x="6" y="10" width="4" height="1" class="body"/>
+  <!-- 耳 -->
+  <rect x="5" y="3" width="1" height="2" class="body"/>
+  <rect x="10" y="3" width="1" height="2" class="body"/>
+  <!-- 目 -->
+  <rect x="6" y="6" width="1" height="1" class="eye"/>
+  <rect x="9" y="6" width="1" height="1" class="eye"/>
+</svg>
