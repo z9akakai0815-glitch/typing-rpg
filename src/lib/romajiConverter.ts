@@ -6,7 +6,7 @@ const hiraganaToRomaji: Record<string, string[]> = {
   // 基本
   'あ': ['a'], 'い': ['i'], 'う': ['u'], 'え': ['e'], 'お': ['o'],
   'か': ['ka'], 'き': ['ki'], 'く': ['ku'], 'け': ['ke'], 'こ': ['ko'],
-  'さ': ['sa'], 'し': ['si', 'shi'], 'す': ['su'], 'せ': ['se'], 'そ': ['so'],
+  'さ': ['sa'], 'し': ['si', 'shi', 'ci'], 'す': ['su'], 'せ': ['se'], 'そ': ['so'],
   'た': ['ta'], 'ち': ['ti', 'chi'], 'つ': ['tu', 'tsu'], 'て': ['te'], 'と': ['to'],
   'な': ['na'], 'に': ['ni'], 'ぬ': ['nu'], 'ね': ['ne'], 'の': ['no'],
   'は': ['ha'], 'ひ': ['hi'], 'ふ': ['hu', 'fu'], 'へ': ['he'], 'ほ': ['ho'],
@@ -17,15 +17,15 @@ const hiraganaToRomaji: Record<string, string[]> = {
   
   // 濁音
   'が': ['ga'], 'ぎ': ['gi'], 'ぐ': ['gu'], 'げ': ['ge'], 'ご': ['go'],
-  'ざ': ['za'], 'じ': ['zi', 'ji'], 'ず': ['zu', 'du'], 'ぜ': ['ze'], 'ぞ': ['zo'],
-  'だ': ['da'], 'ぢ': ['di', 'dhi'], 'づ': ['du', 'zu', 'dzu'], 'で': ['de'], 'ど': ['do'],
+  'ざ': ['za'], 'じ': ['zi', 'ji'], 'ず': ['zu'], 'ぜ': ['ze'], 'ぞ': ['zo'],
+  'だ': ['da'], 'ぢ': ['di'], 'づ': ['du', 'zu'], 'で': ['de'], 'ど': ['do'],
   'ば': ['ba'], 'び': ['bi'], 'ぶ': ['bu'], 'べ': ['be'], 'ぼ': ['bo'],
   'ぱ': ['pa'], 'ぴ': ['pi'], 'ぷ': ['pu'], 'ぺ': ['pe'], 'ぽ': ['po'],
   
   // 拗音
   'きゃ': ['kya'], 'きゅ': ['kyu'], 'きょ': ['kyo'],
   'しゃ': ['sya', 'sha'], 'しゅ': ['syu', 'shu'], 'しょ': ['syo', 'sho'],
-  'ちゃ': ['tya', 'cha'], 'ちゅ': ['tyu', 'chu'], 'ちょ': ['tyo', 'cho'],
+  'ちゃ': ['tya', 'cha', 'cya'], 'ちゅ': ['tyu', 'chu', 'cyu'], 'ちょ': ['tyo', 'cho', 'cyo'],
   'にゃ': ['nya'], 'にゅ': ['nyu'], 'にょ': ['nyo'],
   'ひゃ': ['hya'], 'ひゅ': ['hyu'], 'ひょ': ['hyo'],
   'みゃ': ['mya'], 'みゅ': ['myu'], 'みょ': ['myo'],
@@ -43,10 +43,10 @@ const hiraganaToRomaji: Record<string, string[]> = {
   // 長音
   'ー': ['-'],
   
-  // カタカナ（ひらがなと同じ読み）
+  // カタカナ
   'ア': ['a'], 'イ': ['i'], 'ウ': ['u'], 'エ': ['e'], 'オ': ['o'],
   'カ': ['ka'], 'キ': ['ki'], 'ク': ['ku'], 'ケ': ['ke'], 'コ': ['ko'],
-  'サ': ['sa'], 'シ': ['si', 'shi'], 'ス': ['su'], 'セ': ['se'], 'ソ': ['so'],
+  'サ': ['sa'], 'シ': ['si', 'shi', 'ci'], 'ス': ['su'], 'セ': ['se'], 'ソ': ['so'],
   'タ': ['ta'], 'チ': ['ti', 'chi'], 'ツ': ['tu', 'tsu'], 'テ': ['te'], 'ト': ['to'],
   'ナ': ['na'], 'ニ': ['ni'], 'ヌ': ['nu'], 'ネ': ['ne'], 'ノ': ['no'],
   'ハ': ['ha'], 'ヒ': ['hi'], 'フ': ['hu', 'fu'], 'ヘ': ['he'], 'ホ': ['ho'],
@@ -61,7 +61,7 @@ const hiraganaToRomaji: Record<string, string[]> = {
   'パ': ['pa'], 'ピ': ['pi'], 'プ': ['pu'], 'ペ': ['pe'], 'ポ': ['po'],
   'キャ': ['kya'], 'キュ': ['kyu'], 'キョ': ['kyo'],
   'シャ': ['sya', 'sha'], 'シュ': ['syu', 'shu'], 'ショ': ['syo', 'sho'],
-  'チャ': ['tya', 'cha'], 'チュ': ['tyu', 'chu'], 'チョ': ['tyo', 'cho'],
+  'チャ': ['tya', 'cha', 'cya'], 'チュ': ['tyu', 'chu', 'cyu'], 'チョ': ['tyo', 'cho', 'cyo'],
   'ニャ': ['nya'], 'ニュ': ['nyu'], 'ニョ': ['nyo'],
   'ヒャ': ['hya'], 'ヒュ': ['hyu'], 'ヒョ': ['hyo'],
   'ミャ': ['mya'], 'ミュ': ['myu'], 'ミョ': ['myo'],
@@ -73,9 +73,16 @@ const hiraganaToRomaji: Record<string, string[]> = {
   'ッ': ['xtu', 'ltu', 'xtsu', 'ltsu'],
 };
 
-// 日本語テキストをローマ字パターンに変換
-export function generateRomajiPatterns(japanese: string): string[][] {
-  const patterns: string[][] = [];
+// 文字チャンク（促音処理済み）
+interface CharChunk {
+  char: string;           // 元の日本語文字
+  patterns: string[];     // 有効なローマ字パターン
+  isDoubleConsonant: boolean; // 促音による子音重ねか
+}
+
+// 日本語テキストをチャンクに分解
+function parseJapanese(japanese: string): CharChunk[] {
+  const chunks: CharChunk[] = [];
   let i = 0;
   
   while (i < japanese.length) {
@@ -83,72 +90,99 @@ export function generateRomajiPatterns(japanese: string): string[][] {
     if (i + 1 < japanese.length) {
       const twoChar = japanese.substring(i, i + 2);
       if (hiraganaToRomaji[twoChar]) {
-        patterns.push(hiraganaToRomaji[twoChar]);
+        chunks.push({
+          char: twoChar,
+          patterns: [...hiraganaToRomaji[twoChar]],
+          isDoubleConsonant: false,
+        });
         i += 2;
         continue;
       }
     }
     
-    // 促音（っ/ッ）の処理
     const char = japanese[i];
+    
+    // 促音（っ/ッ）の処理
     if (char === 'っ' || char === 'ッ') {
-      // 次の文字の子音を重ねる
+      // 次の文字の子音を取得
       if (i + 1 < japanese.length) {
-        const nextChar = japanese[i + 1];
+        let nextPatterns: string[] | undefined;
+        
         // 次の2文字が拗音かチェック
-        let nextRomaji: string[] | undefined;
         if (i + 2 < japanese.length) {
           const nextTwo = japanese.substring(i + 1, i + 3);
-          nextRomaji = hiraganaToRomaji[nextTwo];
+          nextPatterns = hiraganaToRomaji[nextTwo];
         }
-        if (!nextRomaji) {
-          nextRomaji = hiraganaToRomaji[nextChar];
+        if (!nextPatterns) {
+          nextPatterns = hiraganaToRomaji[japanese[i + 1]];
         }
         
-        if (nextRomaji) {
-          // 子音を取得して重ねる
-          const consonants = nextRomaji.map(r => {
-            const consonant = r[0];
-            // 母音で始まる場合は促音を入れない
-            if ('aiueo'.includes(consonant)) return '';
-            return consonant;
-          });
-          patterns.push([...new Set(consonants.filter(c => c !== ''))]);
-          i++;
-          continue;
+        if (nextPatterns) {
+          // 子音を重ねる（例: kk, tt, ss）
+          const consonants: string[] = [];
+          for (const pattern of nextPatterns) {
+            const firstChar = pattern[0];
+            // 母音で始まる場合はスキップ
+            if (!'aiueo'.includes(firstChar)) {
+              consonants.push(firstChar);
+            }
+          }
+          
+          if (consonants.length > 0) {
+            chunks.push({
+              char: char,
+              patterns: [...new Set(consonants)],
+              isDoubleConsonant: true,
+            });
+            i++;
+            continue;
+          }
         }
       }
-      // 単独の促音
-      patterns.push(hiraganaToRomaji[char] || ['']);
+      
+      // 単独の促音（xtu/ltu等）
+      chunks.push({
+        char: char,
+        patterns: hiraganaToRomaji[char] || [''],
+        isDoubleConsonant: false,
+      });
       i++;
       continue;
     }
     
-    // 1文字
+    // 通常の1文字
     if (hiraganaToRomaji[char]) {
-      patterns.push(hiraganaToRomaji[char]);
+      chunks.push({
+        char: char,
+        patterns: [...hiraganaToRomaji[char]],
+        isDoubleConsonant: false,
+      });
     } else {
-      // 漢字などはそのまま（読み仮名が必要）
-      patterns.push([char]);
+      // 未知の文字はそのまま
+      chunks.push({
+        char: char,
+        patterns: [char],
+        isDoubleConsonant: false,
+      });
     }
     i++;
   }
   
-  return patterns;
+  return chunks;
 }
 
 // 入力チェッカークラス
 export class RomajiChecker {
-  private patterns: string[][];
-  private currentPatternIndex: number = 0;
-  private currentCharIndex: number = 0;
-  private selectedPattern: string[] = [];
+  private chunks: CharChunk[];
+  private chunkIndex: number = 0;
+  private charInChunk: number = 0;
+  private currentValidPatterns: string[] = [];
   private typedRomaji: string = '';
   
   constructor(japanese: string) {
-    this.patterns = generateRomajiPatterns(japanese);
-    if (this.patterns.length > 0) {
-      this.selectedPattern = [...this.patterns[0]];
+    this.chunks = parseJapanese(japanese);
+    if (this.chunks.length > 0) {
+      this.currentValidPatterns = [...this.chunks[0].patterns];
     }
   }
   
@@ -156,44 +190,44 @@ export class RomajiChecker {
   processKey(key: string): { accepted: boolean; completed: boolean } {
     const lowerKey = key.toLowerCase();
     
-    if (this.currentPatternIndex >= this.patterns.length) {
+    // 全チャンク完了済み
+    if (this.chunkIndex >= this.chunks.length) {
       return { accepted: false, completed: true };
     }
     
-    const currentPatterns = this.patterns[this.currentPatternIndex];
-    
-    // 現在のパターングループから、入力可能なパターンを探す
-    const matchingPatterns = currentPatterns.filter(pattern => {
-      if (this.currentCharIndex >= pattern.length) return false;
-      return pattern[this.currentCharIndex] === lowerKey;
+    // 現在の位置で有効なパターンをフィルタ
+    const matchingPatterns = this.currentValidPatterns.filter(pattern => {
+      return this.charInChunk < pattern.length && pattern[this.charInChunk] === lowerKey;
     });
     
-    if (matchingPatterns.length > 0) {
-      // マッチするパターンがあれば受け入れ
-      this.typedRomaji += lowerKey;
-      this.currentCharIndex++;
-      
-      // パターンが完了したかチェック
-      const completedPatterns = matchingPatterns.filter(p => p.length === this.currentCharIndex);
-      
-      if (completedPatterns.length > 0) {
-        // 次のパターングループへ
-        this.currentPatternIndex++;
-        this.currentCharIndex = 0;
-        
-        // 全完了チェック
-        if (this.currentPatternIndex >= this.patterns.length) {
-          return { accepted: true, completed: true };
-        }
-      }
-      
-      // まだ続きがあるパターンに絞る
-      this.patterns[this.currentPatternIndex] = matchingPatterns;
-      
-      return { accepted: true, completed: false };
+    if (matchingPatterns.length === 0) {
+      // どのパターンにもマッチしない = 入力ミス
+      return { accepted: false, completed: false };
     }
     
-    return { accepted: false, completed: false };
+    // マッチした！
+    this.typedRomaji += lowerKey;
+    this.charInChunk++;
+    this.currentValidPatterns = matchingPatterns;
+    
+    // 完了したパターンがあるかチェック
+    const completedPattern = matchingPatterns.find(p => p.length === this.charInChunk);
+    
+    if (completedPattern) {
+      // このチャンクは完了、次へ
+      this.chunkIndex++;
+      this.charInChunk = 0;
+      
+      if (this.chunkIndex >= this.chunks.length) {
+        // 全チャンク完了！
+        return { accepted: true, completed: true };
+      }
+      
+      // 次のチャンクのパターンをセット
+      this.currentValidPatterns = [...this.chunks[this.chunkIndex].patterns];
+    }
+    
+    return { accepted: true, completed: false };
   }
   
   // 入力済みのローマ字を取得
@@ -203,21 +237,13 @@ export class RomajiChecker {
   
   // 進捗率を取得（0-1）
   getProgress(): number {
-    if (this.patterns.length === 0) return 1;
-    return this.currentPatternIndex / this.patterns.length;
-  }
-  
-  // リセット
-  reset(japanese: string) {
-    this.patterns = generateRomajiPatterns(japanese);
-    this.currentPatternIndex = 0;
-    this.currentCharIndex = 0;
-    this.typedRomaji = '';
+    if (this.chunks.length === 0) return 1;
+    return this.chunkIndex / this.chunks.length;
   }
 }
 
 // 表示用ローマ字を生成（最初のパターンを使用）
 export function getDisplayRomaji(japanese: string): string {
-  const patterns = generateRomajiPatterns(japanese);
-  return patterns.map(p => p[0] || '').join('');
+  const chunks = parseJapanese(japanese);
+  return chunks.map(chunk => chunk.patterns[0] || '').join('');
 }
